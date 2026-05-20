@@ -3,11 +3,6 @@ import re
 import aiohttp
 from config import OPENAI_API_KEY, AI_API_URL, AI_MODEL
 
-HEADERS = {
-    "Authorization": f"Bearer {OPENAI_API_KEY}",
-    "Content-Type": "application/json"
-}
-
 TIMEOUT = aiohttp.ClientTimeout(total=30)
 
 
@@ -19,7 +14,7 @@ def _extract_json(text: str) -> str:
 
 
 def _fallback_analysis(title: str, description: str, link: str) -> dict:
-    """Если API недоступен — простая эвристика."""
+    """Если Google AI недоступен — простая эвристика."""
     text = (title + " " + (description or "") + " " + link).lower()
     score = 0
     flags = []
@@ -54,8 +49,13 @@ def _fallback_analysis(title: str, description: str, link: str) -> dict:
 
 
 async def analyze_airdrop(title: str, description: str, link: str) -> dict:
-    if not OPENAI_API_KEY:
+    if not OPENAI_API_KEY or OPENAI_API_KEY == "AIzaSy...ВАШ_КЛЮЧ...":
         return _fallback_analysis(title, description, link)
+
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
 
     prompt = f"""Проанализируй крипто-аирдроп и верни ТОЛЬКО JSON без markdown, без текста вне JSON:
 {{
@@ -75,7 +75,7 @@ async def analyze_airdrop(title: str, description: str, link: str) -> dict:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 AI_API_URL,
-                headers=HEADERS,
+                headers=headers,
                 json={
                     "model": AI_MODEL,
                     "messages": [{"role": "user", "content": prompt}],
@@ -85,15 +85,18 @@ async def analyze_airdrop(title: str, description: str, link: str) -> dict:
                 timeout=TIMEOUT
             ) as resp:
                 if resp.status != 200:
+                    error_text = await resp.text()
+                    print(f"[Google AI] HTTP {resp.status}: {error_text[:200]}")
                     return _fallback_analysis(title, description, link)
+
                 data = await resp.json()
                 content = data["choices"][0]["message"]["content"]
                 clean = _extract_json(content)
                 result = json.loads(clean)
-                # Валидация
                 result["scam_probability"] = max(0, min(100, int(result.get("scam_probability", 50))))
                 result["difficulty"] = max(1, min(5, int(result.get("difficulty", 3))))
                 return result
+
     except Exception as e:
-        print(f"[AI Filter] Ошибка: {e}")
+        print(f"[Google AI] Ошибка: {e}")
         return _fallback_analysis(title, description, link)
