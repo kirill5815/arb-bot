@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 CATEGORIES = ["DeFi", "NFT", "Testnet", "Gaming", "Layer2", "Other"]
 
 # ===== ВПИШИ СВОЙ КЛЮЧ CEREBRAS СЮДА =====
-CEREBRAS_KEY = "sk-5b594e5758874651a29352f330c6d1bd"
+CEREBRAS_KEY = "csk-2cn93hr48ktj5c6hyt8nc4rd3rpcwd95mxypnmknecnvxnd9"
 CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
 CEREBRAS_MODEL = "llama3.1-70b"
 
