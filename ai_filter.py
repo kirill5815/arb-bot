@@ -2,9 +2,9 @@ import json
 import re
 import aiohttp
 
-# ===== ХАРДКОД КЛЮЧА CEREBRAS =====
-# Впиши свой ключ сюда (начинается с csk-):
-OPENAI_API_KEY = "csk-8kpd9nmcr8h9986p3rw999h4cftvehxwwt9pkvrkkv5rvj5k"
+# ===== ВПИШИ СВОЙ КЛЮЧ CEREBRAS =====
+# Получи на https://cloud.cerebras.ai/platform
+OPENAI_API_KEY = "csk-8kpd9nmcr8h9986p3rw999h4cftvehxwwt9pkvrkkv5rvj5k"  # ← ЗАМЕНИ ЭТО!
 AI_API_URL = "https://api.cerebras.ai/v1/chat/completions"
 AI_MODEL = "llama3.1-70b"
 
@@ -19,24 +19,21 @@ def _extract_json(text: str) -> str:
 
 
 def _fallback_analysis(title: str, description: str, link: str) -> dict:
-    """Если Cerebras недоступен — простая эвристика."""
     text = (title + " " + (description or "") + " " + link).lower()
     score = 0
     flags = []
-    if "connect wallet" in text and ("private key" in text or "seed phrase" in text or "secret phrase" in text):
+    if "connect wallet" in text and ("private key" in text or "seed phrase" in text):
         score += 60
-        flags.append("Запрос приватного ключа/сид-фразы")
+        flags.append("Запрос приватного ключа")
     if "guaranteed" in text or "100%" in text or "instant withdraw" in text:
         score += 40
-        flags.append("Гарантированная/мгновенная прибыль")
-    if "send eth" in text or "send bnb" in text or "deposit first" in text:
+        flags.append("Гарантированная прибыль")
+    if "send eth" in text or "send bnb" in text:
         score += 30
         flags.append("Требуется отправка крипты")
-    if "referral" in text or "invite" in text:
-        score += 10
     if score > 80:
         diff = 1
-        profit = "0 (вероятный скам)"
+        profit = "0 (скам)"
     elif score > 40:
         diff = 2
         profit = "10-30"
@@ -48,18 +45,16 @@ def _fallback_analysis(title: str, description: str, link: str) -> dict:
         "difficulty": diff,
         "expected_profit_usd": profit,
         "time_required_minutes": 30,
-        "summary": "Базовая эвристика: проверьте проект вручную." if flags else "Выглядит стандартно.",
-        "red_flags": flags if flags else ["Нет явных флагов"]
+        "summary": "Базовая эвристика" if flags else "Стандартный аирдроп",
+        "red_flags": flags if flags else ["Нет флагов"]
     }
 
 
 async def analyze_airdrop(title: str, description: str, link: str) -> dict:
-    # ОТЛАДКА: показываем статус ключа в логах
-    print(f"[DEBUG] API_KEY начинается с: {OPENAI_API_KEY[:10] if OPENAI_API_KEY else 'EMPTY'}...")
-    print(f"[DEBUG] API_KEY длина: {len(OPENAI_API_KEY) if OPENAI_API_KEY else 0}")
-
-    if not OPENAI_API_KEY or OPENAI_API_KEY == "csk-ВАШ_РЕАЛЬНЫЙ_КЛЮЧ_ЗДЕСЬ" or len(OPENAI_API_KEY) < 20:
-        print("[DEBUG] Ключ не валиден, используем fallback")
+    print(f"[AI] KEY length: {len(OPENAI_API_KEY)}, starts with: {OPENAI_API_KEY[:8]}...")
+    
+    if not OPENAI_API_KEY or "ВАШ" in OPENAI_API_KEY or len(OPENAI_API_KEY) < 20:
+        print("[AI] KEY invalid, using fallback")
         return _fallback_analysis(title, description, link)
 
     headers = {
@@ -67,50 +62,34 @@ async def analyze_airdrop(title: str, description: str, link: str) -> dict:
         "Content-Type": "application/json"
     }
 
-    prompt = f"""Проанализируй крипто-аирдроп и верни ТОЛЬКО JSON без markdown, без текста вне JSON:
-{{
-  "scam_probability": число от 0 до 100,
-  "difficulty": число от 1 до 5,
-  "expected_profit_usd": "диапазон в долларах, например 10-50",
-  "time_required_minutes": число,
-  "summary": "краткий вывод на русском, 1-2 предложения",
-  "red_flags": ["список подозрительных моментов или пустой список"]
-}}
-
-Название: {title}
-Описание: {description or "нет"}
-Ссылка: {link}"""
+    prompt = f"""Analyze crypto airdrop, return ONLY JSON:
+{{"scam_probability":0-100,"difficulty":1-5,"expected_profit_usd":"10-50","time_required_minutes":30,"summary":"brief Russian conclusion","red_flags":["list or empty"]}}
+Title:{title} Desc:{description or 'none'} Link:{link}"""
 
     try:
-        print(f"[DEBUG] Отправляем запрос к {AI_API_URL}")
+        print(f"[AI] Sending to {AI_URL}")
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 AI_API_URL,
                 headers=headers,
-                json={
-                    "model": AI_MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.2,
-                    "max_tokens": 600
-                },
+                json={"model": AI_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.2, "max_tokens": 400},
                 timeout=TIMEOUT
             ) as resp:
-                print(f"[DEBUG] Ответ Cerebras: HTTP {resp.status}")
+                print(f"[AI] Response: HTTP {resp.status}")
                 if resp.status != 200:
-                    error_text = await resp.text()
-                    print(f"[Cerebras] HTTP {resp.status}: {error_text[:200]}")
+                    print(f"[AI] Error: {await resp.text()[:100]}")
                     return _fallback_analysis(title, description, link)
-
+                
                 data = await resp.json()
                 content = data["choices"][0]["message"]["content"]
-                print(f"[DEBUG] Ответ ИИ: {content[:100]}...")
+                print(f"[AI] Content: {content[:80]}...")
                 clean = _extract_json(content)
                 result = json.loads(clean)
                 result["scam_probability"] = max(0, min(100, int(result.get("scam_probability", 50))))
                 result["difficulty"] = max(1, min(5, int(result.get("difficulty", 3))))
-                print(f"[DEBUG] ИИ-анализ успешен: риск {result['scam_probability']}%")
+                print(f"[AI] Success: risk={result['scam_probability']}%")
                 return result
-
+                
     except Exception as e:
-        print(f"[Cerebras] Ошибка: {e}")
+        print(f"[AI] Exception: {e}")
         return _fallback_analysis(title, description, link)
