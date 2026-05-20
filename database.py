@@ -153,8 +153,6 @@ async def get_users_by_category(category: str):
         return [r[0] for r in await cursor.fetchall()]
 
 
-# ========== AI ANALYSIS ==========
-
 async def save_airdrop_analysis(airdrop_id, scam, difficulty, profit, time_req, summary, red_flags):
     async with aiosqlite.connect(DATABASE_PATH) as db:
         await db.execute("""
