@@ -95,8 +95,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = get_admin_keyboard() if is_admin else get_main_keyboard()
     await update.message.reply_text(
         f"👋 Привет, {user.first_name}!\n\n"
-        "Я бот для мониторинга крипто-аирдропов с ИИ-фильтром. "
-        "Проверяю скам-риски, сложность и доходность автоматически.",
+        "Я бот для мониторинга крипто-аирдропов с ИИ-фильтром Google AI (Gemini). "
+        "Проверяю скам-риски, сложность и доходность автоматически — бесплатно.",
         reply_markup=keyboard
     )
 
@@ -112,6 +112,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🏠 Главное меню — вернуться в начало\n\n"
         "Или используй команды:\n"
         "/start /list /categories /earn /analyze /help\n\n"
+        "🤖 ИИ: Google Gemini 2.5 Flash (бесплатно)\n"
         f"🔔 Автопроверка каждые {CHECK_INTERVAL_MINUTES} минут."
     )
     await update.message.reply_text(text)
@@ -130,10 +131,10 @@ async def analyze_link_command(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
     link = context.args[0]
-    await update.message.reply_text("🤖 Анализирую ссылку через ИИ...")
+    await update.message.reply_text("🤖 Google AI (Gemini) анализирует ссылку...")
     analysis = await analyze_airdrop("Пользовательская ссылка", "", link)
     text = (
-        f"🔍 ИИ-анализ: {link}\n\n"
+        f"🔍 ИИ-анализ Google Gemini: {link}\n\n"
         f"{_scam_emoji(analysis['scam_probability'])} Скам-риск: {analysis['scam_probability']}%\n"
         f"{_diff_stars(analysis['difficulty'])} Сложность: {analysis['difficulty']}/5\n"
         f"💰 Ожидаемый доход: ${analysis['expected_profit_usd']}\n"
@@ -149,7 +150,7 @@ async def list_airdrops(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not airdrops:
         await update.message.reply_text("😕 Пока нет активных аирдропов.")
         return
-    text = "🎯 Активные аирдропы (с ИИ-оценками):\n\n"
+    text = "🎯 Активные аирдропы (с ИИ-оценками Google Gemini):\n\n"
     for airdrop in airdrops:
         a_id = airdrop[0]
         title = airdrop[1]
@@ -163,7 +164,7 @@ async def list_airdrops(update: Update, context: ContextTypes.DEFAULT_TYPE):
             profit = analysis["expected_profit_usd"]
             ai_line = f"\n{_scam_emoji(scam)} Риск: {scam}% | ⭐{diff}/5 | 💰~${profit}"
         else:
-            ai_line = "\n🤖 ИИ-анализ: в обработке..."
+            ai_line = "\n🤖 Google AI: в обработке..."
         text += f"*{title}* ({category}){ai_line}\n🔗 {link}\n_{desc[:80]}_\n\n"
     await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
 
@@ -249,7 +250,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "help":
         text = (
             "📖 Помощь\n\n"
-            "Бот присылает уведомления об аирдропах с ИИ-оценками.\n"
+            "Бот присылает уведомления об аирдропах с ИИ-оценками Google Gemini.\n"
             "Если не выбрано ни одной категории — приходят все уведомления.\n\n"
             "Команды: /start /list /categories /earn /analyze /help"
         )
@@ -281,11 +282,10 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif text == "🔄 Запустить парсинг" and user.id in ADMIN_IDS:
         await admin_parse(update, context)
     elif text.startswith("http"):
-        # Авто-анализ ссылок
-        await update.message.reply_text("🤖 Анализирую ссылку через ИИ...")
+        await update.message.reply_text("🤖 Google AI (Gemini) анализирует ссылку...")
         analysis = await analyze_airdrop("Пользовательская ссылка", "", text)
         result = (
-            f"🔍 ИИ-анализ\n\n"
+            f"🔍 ИИ-анализ Google Gemini\n\n"
             f"{_scam_emoji(analysis['scam_probability'])} Скам-риск: {analysis['scam_probability']}%\n"
             f"{_diff_stars(analysis['difficulty'])} Сложность: {analysis['difficulty']}/5\n"
             f"💰 Ожидаемый доход: ${analysis['expected_profit_usd']}\n"
@@ -313,8 +313,7 @@ async def admin_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = context.args[2]
     description = " ".join(context.args[3:]) if len(context.args) > 3 else ""
     airdrop_id = await add_airdrop(title, description, link, category)
-    # AI анализ при ручном добавлении
-    await update.message.reply_text("🤖 Запускаю ИИ-анализ...")
+    await update.message.reply_text("🤖 Google AI (Gemini) анализирует...")
     analysis = await analyze_airdrop(title, description, link)
     await save_airdrop_analysis(
         airdrop_id=airdrop_id,
@@ -338,7 +337,7 @@ async def admin_parse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in ADMIN_IDS:
         await update.message.reply_text("⛔ Нет доступа.")
         return
-    await update.message.reply_text("🔄 Запускаю парсинг + ИИ-анализ...")
+    await update.message.reply_text("🔄 Запускаю парсинг + Google AI анализ...")
     count = await fetch_and_save_airdrops()
     await update.message.reply_text(f"✅ Добавлено и проанализировано {count} аирдропов.")
 
@@ -389,7 +388,7 @@ async def check_new_airdrops(application: Application):
 async def post_init(application: Application):
     await init_db()
     asyncio.create_task(check_new_airdrops(application))
-    logger.info("Бот запущен. Фоновая задача, парсер и ИИ-фильтр активны.")
+    logger.info("Бот запущен. Google AI (Gemini) фильтр активен.")
 
 
 def main():
