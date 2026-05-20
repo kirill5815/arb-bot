@@ -20,14 +20,38 @@ logger = logging.getLogger(__name__)
 
 CATEGORIES = ["DeFi", "NFT", "Testnet", "Gaming", "Layer2", "Other"]
 
+EARN_TEXT = (
+    "💰 Как заработать на аирдропах (реалистичный взгляд)\n\n"
+    "📊 Средний доход:\n"
+    "• Простые соц. активности: $10–50\n"
+    "• Тестнеты / DeFi активности: $100–500\n"
+    "• Крупные ранние проекты (Arbitrum, Optimism): $1 000–10 000+\n"
+    "• Но: 90% аирдропов дают $0 или оказываются скамом\n\n"
+    "🛠 Пошаговая инструкция:\n"
+    "1. Кошелёк MetaMask + сети ETH, Polygon, Arbitrum, Base\n"
+    "2. Небольшой баланс для газа ($20–50 в ETH/MATIC)\n"
+    "3. Регистрация на проектах, выполнение заданий (Discord, Twitter, тестовые транзакции)\n"
+    "4. Ожидание 3–12 месяцев до раздачи токенов\n"
+    "5. Продажа токенов сразу после листинга (часто падают на 50–80% за неделю)\n\n"
+    "⚠️ Риски:\n"
+    "• Потеря времени: 30 мин – 2 часа на 1 аирдроп\n"
+    "• Потеря денег на газе, если проект не раздаёт\n"
+    "• Скам-проекты крадут приватные ключи\n"
+    "• Мультиаккаунты (10+ кошельков) увеличивают доход, но требуют больше времени и средств\n\n"
+    "💡 Совет: делай 10–20 качественных аирдропов в месяц. "
+    "Диверсифицируй по категориям (DeFi, Layer2, Gaming). "
+    "Не гонись за каждой раздачей — фильтруй через бота."
+)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await add_user(user.id, user.username)
     keyboard = [
-        [InlineKeyboardButton("Текущие аирдропы", callback_data="list")],
-        [InlineKeyboardButton("Настроить категории", callback_data="categories")],
-        [InlineKeyboardButton("Помощь", callback_data="help")]
+        [InlineKeyboardButton("🔍 Текущие аирдропы", callback_data="list")],
+        [InlineKeyboardButton("⚙️ Категории", callback_data="categories")],
+        [InlineKeyboardButton("💰 Как заработать", callback_data="earn")],
+        [InlineKeyboardButton("❓ Помощь", callback_data="help")]
     ]
     await update.message.reply_text(
         f"Привет, {user.first_name}!\n\n"
@@ -39,30 +63,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
-        "Команды бота:\n\n"
+        "📖 Команды бота:\n\n"
         "/start — Главное меню\n"
         "/list — Активные аирдропы\n"
         "/categories — Категории уведомлений\n"
         "/latest — Последние аирдропы\n"
+        "/earn — Сколько и как заработать\n"
         "/parse — Принудительный парсинг (админ)\n\n"
-        f"Проверка новых аирдропов каждые {CHECK_INTERVAL_MINUTES} минут."
+        f"🔔 Автопроверка каждые {CHECK_INTERVAL_MINUTES} минут."
     )
     await update.message.reply_text(text)
+
+
+async def earn_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(EARN_TEXT)
 
 
 async def list_airdrops(update: Update, context: ContextTypes.DEFAULT_TYPE):
     airdrops = await get_active_airdrops(limit=10)
     if not airdrops:
-        await update.message.reply_text("Пока нет активных аирдропов.")
+        await update.message.reply_text("😕 Пока нет активных аирдропов.")
         return
-    text = "Активные аирдропы:\n\n"
+    text = "🎯 Активные аирдропы:\n\n"
     for airdrop in airdrops:
         title = airdrop[1]
         category = airdrop[4]
         link = airdrop[3]
         desc = airdrop[2] or ""
-        text += f"{title} ({category})\n{link}\n{desc[:100]}\n\n"
-    await update.message.reply_text(text, disable_web_page_preview=True)
+        text += f"*{title}* ({category})\n🔗 {link}\n_{desc[:100]}_\n\n"
+    await update.message.reply_text(text, parse_mode="Markdown", disable_web_page_preview=True)
 
 
 async def categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -72,9 +101,9 @@ async def categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for cat in CATEGORIES:
         icon = "✅" if cat in user_cats else "⬜"
         keyboard.append([InlineKeyboardButton(f"{icon} {cat}", callback_data=f"cat_{cat}")])
-    keyboard.append([InlineKeyboardButton("Назад", callback_data="menu")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu")])
     await update.message.reply_text(
-        "Выбери категории для уведомлений:",
+        "⚙️ Выбери категории для уведомлений:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -88,13 +117,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "list":
         airdrops = await get_active_airdrops(limit=10)
         if not airdrops:
-            await query.edit_message_text("Пока нет активных аирдропов.")
+            await query.edit_message_text("😕 Пока нет активных аирдропов.")
             return
-        text = "Активные аирдропы:\n\n"
+        text = "🎯 Активные аирдропы:\n\n"
         for airdrop in airdrops:
-            text += f"{airdrop[1]} ({airdrop[4]})\n{airdrop[3]}\n\n"
-        keyboard = [[InlineKeyboardButton("Назад", callback_data="menu")]]
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
+            text += f"*{airdrop[1]}* ({airdrop[4]})\n🔗 {airdrop[3]}\n\n"
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu")]]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown", disable_web_page_preview=True)
 
     elif data == "categories":
         user_cats = await get_user_categories(user_id)
@@ -102,8 +131,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for cat in CATEGORIES:
             icon = "✅" if cat in user_cats else "⬜"
             keyboard.append([InlineKeyboardButton(f"{icon} {cat}", callback_data=f"cat_{cat}")])
-        keyboard.append([InlineKeyboardButton("Назад", callback_data="menu")])
-        await query.edit_message_text("Выбери категории:", reply_markup=InlineKeyboardMarkup(keyboard))
+        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu")])
+        await query.edit_message_text("⚙️ Выбери категории:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data.startswith("cat_"):
         category = data.replace("cat_", "")
@@ -115,31 +144,37 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for cat in CATEGORIES:
             icon = "✅" if cat in user_cats else "⬜"
             keyboard.append([InlineKeyboardButton(f"{icon} {cat}", callback_data=f"cat_{cat}")])
-        keyboard.append([InlineKeyboardButton("Назад", callback_data="menu")])
+        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu")])
         await query.edit_message_reply_markup(InlineKeyboardMarkup(keyboard))
 
     elif data == "menu":
         keyboard = [
-            [InlineKeyboardButton("Текущие аирдропы", callback_data="list")],
-            [InlineKeyboardButton("Настроить категории", callback_data="categories")],
-            [InlineKeyboardButton("Помощь", callback_data="help")]
+            [InlineKeyboardButton("🔍 Текущие аирдропы", callback_data="list")],
+            [InlineKeyboardButton("⚙️ Категории", callback_data="categories")],
+            [InlineKeyboardButton("💰 Как заработать", callback_data="earn")],
+            [InlineKeyboardButton("❓ Помощь", callback_data="help")]
         ]
-        await query.edit_message_text("Главное меню\n\nВыбери действие:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text("👋 Главное меню\n\nВыбери действие:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif data == "earn":
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu")]]
+        await query.edit_message_text(EARN_TEXT, reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data == "help":
         text = (
-            "Помощь\n\n"
+            "📖 Помощь\n\n"
             "Бот присылает уведомления об аирдропах по выбранным категориям.\n"
-            "Если не выбрано ни одной категории — приходят все уведомления."
+            "Если не выбрано ни одной категории — приходят все уведомления.\n\n"
+            "Команды: /start /list /categories /earn /parse"
         )
-        keyboard = [[InlineKeyboardButton("Назад", callback_data="menu")]]
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu")]]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def admin_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
-        await update.message.reply_text("Нет доступа.")
+        await update.message.reply_text("⛔ Нет доступа.")
         return
     if len(context.args) < 3:
         await update.message.reply_text(
@@ -151,21 +186,20 @@ async def admin_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link = context.args[2]
     description = " ".join(context.args[3:]) if len(context.args) > 3 else ""
     airdrop_id = await add_airdrop(title, description, link, category)
-    await update.message.reply_text(f"Аирдроп добавлен! ID: {airdrop_id}")
+    await update.message.reply_text(f"✅ Аирдроп добавлен! ID: {airdrop_id}")
 
 
 async def admin_parse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in ADMIN_IDS:
-        await update.message.reply_text("Нет доступа.")
+        await update.message.reply_text("⛔ Нет доступа.")
         return
-    await update.message.reply_text("Запускаю парсинг...")
+    await update.message.reply_text("🔄 Запускаю парсинг...")
     count = await fetch_and_save_airdrops()
-    await update.message.reply_text(f"Добавлено {count} аирдропов из внешних источников.")
+    await update.message.reply_text(f"✅ Добавлено {count} аирдропов из внешних источников.")
 
 
 async def check_new_airdrops(application: Application):
-    """Фоновая задача: парсит сайты и рассылает уведомления."""
     while True:
         try:
             await fetch_and_save_airdrops()
@@ -179,11 +213,11 @@ async def check_new_airdrops(application: Application):
                 subscribers = await get_users_by_category(category)
                 if not subscribers:
                     subscribers = await get_all_active_users()
-                text = f"Новый аирдроп!\n\n{title}\nКатегория: {category}\n\n{link}\n\n{description[:200]}"
+                text = f"🆕 Новый аирдроп!\n\n*{title}*\nКатегория: {category}\n\n🔗 {link}\n\n{description[:200]}"
                 sent_count = 0
                 for user_id in subscribers:
                     try:
-                        await application.bot.send_message(chat_id=user_id, text=text, disable_web_page_preview=True)
+                        await application.bot.send_message(chat_id=user_id, text=text, parse_mode="Markdown", disable_web_page_preview=True)
                         sent_count += 1
                         await asyncio.sleep(0.05)
                     except Exception as e:
@@ -214,6 +248,7 @@ def main():
     application.add_handler(CommandHandler("list", list_airdrops))
     application.add_handler(CommandHandler("categories", categories_command))
     application.add_handler(CommandHandler("latest", list_airdrops))
+    application.add_handler(CommandHandler("earn", earn_command))
     application.add_handler(CommandHandler("add", admin_add))
     application.add_handler(CommandHandler("parse", admin_parse))
     application.add_handler(CallbackQueryHandler(button_handler))
