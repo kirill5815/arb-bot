@@ -1,6 +1,6 @@
 import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "ВАШ_ТОКЕН_ЗДЕСЬ")
-ADMIN_IDS = [123456789]
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8880570485:AAFS1jsaclCy5EIkLoRYGZBTRgHHA45IbQk")
+ADMIN_IDS = [5452533555]
 CHECK_INTERVAL_MINUTES = 30
 DATABASE_PATH = "data/airdrops.db"
