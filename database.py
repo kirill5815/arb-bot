@@ -34,6 +34,19 @@ async def init_db():
                 PRIMARY KEY (user_id, category)
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS airdrop_analysis (
+                airdrop_id INTEGER PRIMARY KEY,
+                scam_probability INTEGER DEFAULT 0,
+                difficulty INTEGER DEFAULT 3,
+                expected_profit_usd TEXT,
+                time_required_minutes INTEGER DEFAULT 30,
+                summary TEXT,
+                red_flags TEXT,
+                analyzed_at TEXT,
+                FOREIGN KEY (airdrop_id) REFERENCES airdrops(id)
+            )
+        """)
         await db.commit()
 
 
@@ -138,3 +151,36 @@ async def get_users_by_category(category: str):
             (category,)
         )
         return [r[0] for r in await cursor.fetchall()]
+
+
+# ========== AI ANALYSIS ==========
+
+async def save_airdrop_analysis(airdrop_id, scam, difficulty, profit, time_req, summary, red_flags):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        await db.execute("""
+            INSERT OR REPLACE INTO airdrop_analysis
+            (airdrop_id, scam_probability, difficulty, expected_profit_usd, time_required_minutes, summary, red_flags, analyzed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (airdrop_id, scam, difficulty, profit, time_req, summary, red_flags, datetime.now().isoformat()))
+        await db.commit()
+
+
+async def get_airdrop_analysis(airdrop_id: int):
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        cursor = await db.execute(
+            "SELECT * FROM airdrop_analysis WHERE airdrop_id = ?",
+            (airdrop_id,)
+        )
+        row = await cursor.fetchone()
+        if row:
+            return {
+                "airdrop_id": row[0],
+                "scam_probability": row[1],
+                "difficulty": row[2],
+                "expected_profit_usd": row[3],
+                "time_required_minutes": row[4],
+                "summary": row[5],
+                "red_flags": row[6],
+                "analyzed_at": row[7]
+            }
+        return None
