@@ -152,33 +152,41 @@ async def admin_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Аирдроп добавлен! ID: {airdrop_id}")
 
 
-async def check_new_airdrops(context: ContextTypes.DEFAULT_TYPE):
-    new_airdrops = await get_not_notified_airdrops()
-    for airdrop in new_airdrops:
-        airdrop_id = airdrop[0]
-        title = airdrop[1]
-        description = airdrop[2] or ""
-        link = airdrop[3]
-        category = airdrop[4]
-        subscribers = await get_users_by_category(category)
-        if not subscribers:
-            subscribers = await get_all_active_users()
-        text = f"Новый аирдроп!\n\n{title}\nКатегория: {category}\n\n{link}\n\n{description[:200]}"
-        sent_count = 0
-        for user_id in subscribers:
-            try:
-                await context.bot.send_message(chat_id=user_id, text=text, disable_web_page_preview=True)
-                sent_count += 1
-                await asyncio.sleep(0.05)
-            except Exception as e:
-                logger.warning(f"Не удалось отправить {user_id}: {e}")
-        await mark_as_notified(airdrop_id)
-        logger.info(f"Аирдроп {title} разослан {sent_count} пользователям")
+async def check_new_airdrops(application: Application):
+    """Фоновая задача: проверяет новые аирдропы и рассылает уведомления."""
+    while True:
+        try:
+            new_airdrops = await get_not_notified_airdrops()
+            for airdrop in new_airdrops:
+                airdrop_id = airdrop[0]
+                title = airdrop[1]
+                description = airdrop[2] or ""
+                link = airdrop[3]
+                category = airdrop[4]
+                subscribers = await get_users_by_category(category)
+                if not subscribers:
+                    subscribers = await get_all_active_users()
+                text = f"Новый аирдроп!\n\n{title}\nКатегория: {category}\n\n{link}\n\n{description[:200]}"
+                sent_count = 0
+                for user_id in subscribers:
+                    try:
+                        await application.bot.send_message(chat_id=user_id, text=text, disable_web_page_preview=True)
+                        sent_count += 1
+                        await asyncio.sleep(0.05)
+                    except Exception as e:
+                        logger.warning(f"Не удалось отправить {user_id}: {e}")
+                await mark_as_notified(airdrop_id)
+                logger.info(f"Аирдроп {title} разослан {sent_count} пользователям")
+        except Exception as e:
+            logger.error(f"Ошибка в фоновой задаче: {e}")
+        await asyncio.sleep(CHECK_INTERVAL_MINUTES * 60)
 
 
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
     asyncio.get_event_loop().run_until_complete(init_db())
+
+    # Регистрация хендлеров
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("list", list_airdrops))
@@ -186,8 +194,10 @@ def main():
     application.add_handler(CommandHandler("latest", list_airdrops))
     application.add_handler(CommandHandler("add", admin_add))
     application.add_handler(CallbackQueryHandler(button_handler))
-    job_queue = application.job_queue
-    job_queue.run_repeating(check_new_airdrops, interval=CHECK_INTERVAL_MINUTES * 60, first=10)
+
+    # Запуск фоновой задачи через asyncio (вместо JobQueue)
+    asyncio.get_event_loop().create_task(check_new_airdrops(application))
+
     application.run_polling()
 
 
