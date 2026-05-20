@@ -14,7 +14,7 @@ def _extract_json(text: str) -> str:
 
 
 def _fallback_analysis(title: str, description: str, link: str) -> dict:
-    """Если Google AI недоступен — простая эвристика."""
+    """Если Cerebras недоступен — простая эвристика."""
     text = (title + " " + (description or "") + " " + link).lower()
     score = 0
     flags = []
@@ -49,7 +49,7 @@ def _fallback_analysis(title: str, description: str, link: str) -> dict:
 
 
 async def analyze_airdrop(title: str, description: str, link: str) -> dict:
-    if not OPENAI_API_KEY or OPENAI_API_KEY == "AIzaSy...ВАШ_КЛЮЧ...":
+    if not OPENAI_API_KEY or OPENAI_API_KEY == "csk-ВАШ_КЛЮЧ_ЗДЕСЬ":
         return _fallback_analysis(title, description, link)
 
     headers = {
@@ -86,7 +86,7 @@ async def analyze_airdrop(title: str, description: str, link: str) -> dict:
             ) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
-                    print(f"[Google AI] HTTP {resp.status}: {error_text[:200]}")
+                    print(f"[Cerebras] HTTP {resp.status}: {error_text[:200]}")
                     return _fallback_analysis(title, description, link)
 
                 data = await resp.json()
@@ -98,5 +98,5 @@ async def analyze_airdrop(title: str, description: str, link: str) -> dict:
                 return result
 
     except Exception as e:
-        print(f"[Google AI] Ошибка: {e}")
+        print(f"[Cerebras] Ошибка: {e}")
         return _fallback_analysis(title, description, link)
