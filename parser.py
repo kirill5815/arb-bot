@@ -1,7 +1,8 @@
 import asyncio
 import aiohttp
 from bs4 import BeautifulSoup
-from database import add_airdrop
+from database import add_airdrop, save_airdrop_analysis
+from ai_filter import analyze_airdrop
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -31,7 +32,7 @@ async def parse_airdrops_io(session: aiohttp.ClientSession):
                     link = link_tag.get("href", "")
                     if link.startswith("/"):
                         link = "https://airdrops.io" + link
-                    desc = desc_tag.get_text(strip=True)[:200] if desc_tag else ""
+                    desc = desc_tag.get_text(strip=True)[:300] if desc_tag else ""
                     results.append({"title": title, "link": link, "description": desc, "category": "Other"})
             return results
     except Exception as e:
@@ -58,7 +59,7 @@ async def parse_dropsEarn(session: aiohttp.ClientSession):
                     link = link_tag.get("href", "")
                     if link.startswith("/"):
                         link = "https://dropsearn.com" + link
-                    desc = desc_tag.get_text(strip=True)[:200] if desc_tag else ""
+                    desc = desc_tag.get_text(strip=True)[:300] if desc_tag else ""
                     results.append({"title": title, "link": link, "description": desc, "category": "Other"})
             return results
     except Exception as e:
@@ -84,7 +85,7 @@ async def parse_coinmarketcap(session: aiohttp.ClientSession):
                     link = link_tag.get("href", "") if link_tag else ""
                     if link.startswith("/"):
                         link = "https://coinmarketcap.com" + link
-                    desc = cols[2].get_text(strip=True)[:200] if len(cols) > 2 else ""
+                    desc = cols[2].get_text(strip=True)[:300] if len(cols) > 2 else ""
                     results.append({"title": title, "link": link, "description": desc, "category": "Other"})
             return results
     except Exception as e:
@@ -104,11 +105,22 @@ async def fetch_and_save_airdrops():
         added = 0
         for airdrop in all_results:
             try:
-                await add_airdrop(
+                airdrop_id = await add_airdrop(
                     title=airdrop["title"],
                     description=airdrop["description"],
                     link=airdrop["link"],
                     category=airdrop["category"]
+                )
+                # AI-анализ
+                analysis = await analyze_airdrop(airdrop["title"], airdrop["description"], airdrop["link"])
+                await save_airdrop_analysis(
+                    airdrop_id=airdrop_id,
+                    scam=analysis["scam_probability"],
+                    difficulty=analysis["difficulty"],
+                    profit=analysis["expected_profit_usd"],
+                    time_req=analysis["time_required_minutes"],
+                    summary=analysis["summary"],
+                    red_flags=json.dumps(analysis["red_flags"], ensure_ascii=False)
                 )
                 added += 1
             except Exception as e:
