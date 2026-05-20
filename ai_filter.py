@@ -1,7 +1,12 @@
 import json
 import re
 import aiohttp
-from config import OPENAI_API_KEY, AI_API_URL, AI_MODEL
+
+# ===== ХАРДКОД КЛЮЧА CEREBRAS =====
+# Впиши свой ключ сюда (начинается с csk-):
+OPENAI_API_KEY = "csk-8kpd9nmcr8h9986p3rw999h4cftvehxwwt9pkvrkkv5rvj5k"
+AI_API_URL = "https://api.cerebras.ai/v1/chat/completions"
+AI_MODEL = "llama3.1-70b"
 
 TIMEOUT = aiohttp.ClientTimeout(total=30)
 
@@ -49,7 +54,12 @@ def _fallback_analysis(title: str, description: str, link: str) -> dict:
 
 
 async def analyze_airdrop(title: str, description: str, link: str) -> dict:
-    if not OPENAI_API_KEY or OPENAI_API_KEY == "csk-ВАШ_КЛЮЧ_ЗДЕСЬ":
+    # ОТЛАДКА: показываем статус ключа в логах
+    print(f"[DEBUG] API_KEY начинается с: {OPENAI_API_KEY[:10] if OPENAI_API_KEY else 'EMPTY'}...")
+    print(f"[DEBUG] API_KEY длина: {len(OPENAI_API_KEY) if OPENAI_API_KEY else 0}")
+
+    if not OPENAI_API_KEY or OPENAI_API_KEY == "csk-ВАШ_РЕАЛЬНЫЙ_КЛЮЧ_ЗДЕСЬ" or len(OPENAI_API_KEY) < 20:
+        print("[DEBUG] Ключ не валиден, используем fallback")
         return _fallback_analysis(title, description, link)
 
     headers = {
@@ -72,6 +82,7 @@ async def analyze_airdrop(title: str, description: str, link: str) -> dict:
 Ссылка: {link}"""
 
     try:
+        print(f"[DEBUG] Отправляем запрос к {AI_API_URL}")
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 AI_API_URL,
@@ -84,6 +95,7 @@ async def analyze_airdrop(title: str, description: str, link: str) -> dict:
                 },
                 timeout=TIMEOUT
             ) as resp:
+                print(f"[DEBUG] Ответ Cerebras: HTTP {resp.status}")
                 if resp.status != 200:
                     error_text = await resp.text()
                     print(f"[Cerebras] HTTP {resp.status}: {error_text[:200]}")
@@ -91,10 +103,12 @@ async def analyze_airdrop(title: str, description: str, link: str) -> dict:
 
                 data = await resp.json()
                 content = data["choices"][0]["message"]["content"]
+                print(f"[DEBUG] Ответ ИИ: {content[:100]}...")
                 clean = _extract_json(content)
                 result = json.loads(clean)
                 result["scam_probability"] = max(0, min(100, int(result.get("scam_probability", 50))))
                 result["difficulty"] = max(1, min(5, int(result.get("difficulty", 3))))
+                print(f"[DEBUG] ИИ-анализ успешен: риск {result['scam_probability']}%")
                 return result
 
     except Exception as e:
