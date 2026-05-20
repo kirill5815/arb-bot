@@ -10,6 +10,7 @@ from database import (
     get_active_airdrops, add_airdrop, get_not_notified_airdrops,
     mark_as_notified, get_all_active_users, get_users_by_category
 )
+from parser import fetch_and_save_airdrops
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -42,7 +43,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/start — Главное меню\n"
         "/list — Активные аирдропы\n"
         "/categories — Категории уведомлений\n"
-        "/latest — Последние аирдропы\n\n"
+        "/latest — Последние аирдропы\n"
+        "/parse — Принудительный парсинг (админ)\n\n"
         f"Проверка новых аирдропов каждые {CHECK_INTERVAL_MINUTES} минут."
     )
     await update.message.reply_text(text)
@@ -152,10 +154,21 @@ async def admin_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"Аирдроп добавлен! ID: {airdrop_id}")
 
 
+async def admin_parse(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in ADMIN_IDS:
+        await update.message.reply_text("Нет доступа.")
+        return
+    await update.message.reply_text("Запускаю парсинг...")
+    count = await fetch_and_save_airdrops()
+    await update.message.reply_text(f"Добавлено {count} аирдропов из внешних источников.")
+
+
 async def check_new_airdrops(application: Application):
-    """Фоновая задача: проверяет новые аирдропы и рассылает уведомления."""
+    """Фоновая задача: парсит сайты и рассылает уведомления."""
     while True:
         try:
+            await fetch_and_save_airdrops()
             new_airdrops = await get_not_notified_airdrops()
             for airdrop in new_airdrops:
                 airdrop_id = airdrop[0]
@@ -183,10 +196,9 @@ async def check_new_airdrops(application: Application):
 
 
 async def post_init(application: Application):
-    """Запускается PTB перед началом polling — здесь стартует фоновая задача."""
     await init_db()
     asyncio.create_task(check_new_airdrops(application))
-    logger.info("Бот запущен. Фоновая задача активна.")
+    logger.info("Бот запущен. Фоновая задача и парсер активны.")
 
 
 def main():
@@ -203,6 +215,7 @@ def main():
     application.add_handler(CommandHandler("categories", categories_command))
     application.add_handler(CommandHandler("latest", list_airdrops))
     application.add_handler(CommandHandler("add", admin_add))
+    application.add_handler(CommandHandler("parse", admin_parse))
     application.add_handler(CallbackQueryHandler(button_handler))
 
     application.run_polling()
