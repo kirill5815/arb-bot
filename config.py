@@ -11,6 +11,6 @@ DATABASE_PATH = "data/airdrops.db"
 # 3. API Keys → Generate API Key
 # 4. Скопируй ключ (начинается с csk-)
 # 5. Вставь сюда:
-OPENAI_API_KEY = os.getenv("CEREBRAS_API_KEY", "csk-8kpd9nmcr8h9986p3rw999h4cftvehxwwt9pkvrkkv5rvj5k")
+OPENAI_API_KEY = "csk-8kpd9nmcr8h9986p3rw999h4cftvehxwwt9pkvrkkv5rvj5k"
 AI_API_URL = "https://api.cerebras.ai/v1/chat/completions"
 AI_MODEL = "llama3.1-70b"  # или "llama-3.1-8b" (быстрее, но проще)
