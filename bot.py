@@ -182,11 +182,21 @@ async def check_new_airdrops(application: Application):
         await asyncio.sleep(CHECK_INTERVAL_MINUTES * 60)
 
 
-def main():
-    application = Application.builder().token(BOT_TOKEN).build()
-    asyncio.get_event_loop().run_until_complete(init_db())
+async def post_init(application: Application):
+    """Запускается PTB перед началом polling — здесь стартует фоновая задача."""
+    await init_db()
+    asyncio.create_task(check_new_airdrops(application))
+    logger.info("Бот запущен. Фоновая задача активна.")
 
-    # Регистрация хендлеров
+
+def main():
+    application = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(post_init)
+        .build()
+    )
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("list", list_airdrops))
@@ -194,9 +204,6 @@ def main():
     application.add_handler(CommandHandler("latest", list_airdrops))
     application.add_handler(CommandHandler("add", admin_add))
     application.add_handler(CallbackQueryHandler(button_handler))
-
-    # Запуск фоновой задачи через asyncio (вместо JobQueue)
-    asyncio.get_event_loop().create_task(check_new_airdrops(application))
 
     application.run_polling()
 
