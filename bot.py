@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import os
+import re
 import httpx
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -27,23 +29,41 @@ logger = logging.getLogger(__name__)
 
 CATEGORIES = ["DeFi", "NFT", "Testnet", "Gaming", "Layer2", "Other"]
 
-# ===== ВПИШИ СВОЙ КЛЮЧ CEREBRAS СЮДА =====
-CEREBRAS_KEY = "csk-2cn93hr48ktj5c6hyt8nc4rd3rpcwd95mxypnmknecnvxnd9"
+# ===== CEREBRAS API KEY =====
+# Вариант 1: export CEREBRAS_API_KEY="csk-..." перед запуском
+# Вариант 2: добавьте CEREBRAS_API_KEY в config.py
+try:
+    from config import CEREBRAS_API_KEY
+except ImportError:
+    CEREBRAS_API_KEY = ""
+CEREBRAS_KEY = os.environ.get("csk-2cn93hr48ktj5c6hyt8nc4rd3rpcwd95mxypnmknecnvxnd9", CEREBRAS_API_KEY)
 CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
 CEREBRAS_MODEL = "llama-3.1-8b"
 
 
 def _extract_json(text: str) -> str:
-    import re
+    """Извлекает чистый JSON из markdown-обёртки или текста."""
     text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```json\s*|^```\s*|```$", "", text, flags=re.MULTILINE).strip()
+
+    # Вариант 1: JSON внутри ```json ... ``` или ``` ... ```
+    match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+
+    # Вариант 2: JSON внутри фигурных скобок (первое вхождение от { до })
+    match = re.search(r'(\{.*\})', text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+
+    # Вариант 3: вернуть как есть
     return text
 
 
 def _scam_emoji(score: int) -> str:
-    if score >= 70: return "🔴"
-    elif score >= 40: return "🟡"
+    if score >= 70:
+        return "🔴"
+    elif score >= 40:
+        return "🟡"
     return "🟢"
 
 
@@ -51,45 +71,8 @@ def _diff_stars(d: int) -> str:
     return "⭐" * d + "☆" * (5 - d)
 
 
-async def cerebras_analyze(title: str, description: str, link: str) -> dict:
-    """Вызов Cerebras API через httpx."""
-    logger.info(f"[CEREBRAS] KEY length={len(CEREBRAS_KEY)}, prefix={CEREBRAS_KEY[:8]}...")
-
-    if not CEREBRAS_KEY or "ВАШ" in CEREBRAS_KEY or len(CEREBRAS_KEY) < 20:
-        logger.warning("[CEREBRAS] KEY invalid, fallback")
-        return _fallback_analysis(title, description, link)
-
-    prompt = f"""Analyze crypto airdrop, return ONLY JSON:
-{{"scam_probability":0-100,"difficulty":1-5,"expected_profit_usd":"10-50","time_required_minutes":30,"summary":"brief Russian conclusion","red_flags":["list or empty"]}}
-Title:{title} Desc:{description or 'none'} Link:{link}"""
-
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                CEREBRAS_URL,
-                headers={"Authorization": f"Bearer {CEREBRAS_KEY}", "Content-Type": "application/json"},
-                json={"model": CEREBRAS_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.2, "max_tokens": 400}
-            )
-            logger.info(f"[CEREBRAS] HTTP {resp.status_code}")
-            if resp.status_code != 200:
-                logger.error(f"[CEREBRAS] Error: {resp.text[:200]}")
-                return _fallback_analysis(title, description, link)
-
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"]
-            logger.info(f"[CEREBRAS] Response: {content[:80]}...")
-            clean = _extract_json(content)
-            result = json.loads(clean)
-            result["scam_probability"] = max(0, min(100, int(result.get("scam_probability", 50))))
-            result["difficulty"] = max(1, min(5, int(result.get("difficulty", 3))))
-            logger.info(f"[CEREBRAS] Success: risk={result['scam_probability']}%")
-            return result
-    except Exception as e:
-        logger.error(f"[CEREBRAS] Exception: {e}")
-        return _fallback_analysis(title, description, link)
-
-
 def _fallback_analysis(title: str, description: str, link: str) -> dict:
+    """Базовая эвристика при недоступности Cerebras."""
     text = (title + " " + (description or "") + " " + link).lower()
     score = 0
     flags = []
@@ -108,9 +91,82 @@ def _fallback_analysis(title: str, description: str, link: str) -> dict:
         diff, profit = 2, "10-30"
     else:
         diff, profit = 3, "30-200"
-    return {"scam_probability": min(score, 100), "difficulty": diff, "expected_profit_usd": profit,
-            "time_required_minutes": 30, "summary": "Базовая эвристика" if flags else "Стандартный аирдроп",
-            "red_flags": flags if flags else ["Нет флагов"]}
+    return {
+        "scam_probability": min(score, 100),
+        "difficulty": diff,
+        "expected_profit_usd": profit,
+        "time_required_minutes": 30,
+        "summary": "Базовая эвристика" if flags else "Стандартный аирдроп",
+        "red_flags": flags if flags else ["Нет флагов"],
+        "_source": "fallback"
+    }
+
+
+async def cerebras_analyze(title: str, description: str, link: str) -> dict:
+    """Вызов Cerebras API через httpx."""
+    logger.info(f"[CEREBRAS] KEY length={len(CEREBRAS_KEY)}, prefix={CEREBRAS_KEY[:8]}...")
+
+    if not CEREBRAS_KEY or len(CEREBRAS_KEY) < 20:
+        logger.warning("[CEREBRAS] KEY invalid, using fallback")
+        return _fallback_analysis(title, description, link)
+
+    prompt = (
+        "You are a crypto security analyzer. Analyze the airdrop below and return ONLY a raw JSON object. "
+        "Do NOT wrap it in markdown, do NOT use ```json blocks, do NOT add any explanations before or after the JSON.\n\n"
+        "Required exact JSON format:\n"
+        '{"scam_probability":50,"difficulty":3,"expected_profit_usd":"10-50","time_required_minutes":30,"summary":"brief Russian conclusion","red_flags":["list or empty"]}\n\n'
+        f"Title: {title}\n"
+        f"Description: {description or 'none'}\n"
+        f"Link: {link}"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                CEREBRAS_URL,
+                headers={
+                    "Authorization": f"Bearer {CEREBRAS_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": CEREBRAS_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.1,
+                    "max_tokens": 400
+                }
+            )
+            logger.info(f"[CEREBRAS] HTTP {resp.status_code}")
+
+            if resp.status_code != 200:
+                logger.error(f"[CEREBRAS] Error body: {resp.text[:300]}")
+                return _fallback_analysis(title, description, link)
+
+            data = resp.json()
+            content = data["choices"][0]["message"]["content"]
+            logger.info(f"[CEREBRAS] Raw response: {content[:250]}...")
+
+            clean = _extract_json(content)
+            logger.info(f"[CEREBRAS] Extracted JSON: {clean[:250]}...")
+
+            result = json.loads(clean)
+
+            # Валидация и дефолты для всех обязательных полей
+            result["scam_probability"] = max(0, min(100, int(result.get("scam_probability", 50))))
+            result["difficulty"] = max(1, min(5, int(result.get("difficulty", 3))))
+            result.setdefault("expected_profit_usd", "N/A")
+            result.setdefault("time_required_minutes", 30)
+            result.setdefault("summary", "Нет вывода")
+            result.setdefault("red_flags", [])
+            result["_source"] = "api"
+
+            logger.info(f"[CEREBRAS] Success: risk={result['scam_probability']}%, diff={result['difficulty']}")
+            return result
+
+    except Exception as e:
+        logger.error(f"[CEREBRAS] Exception: {type(e).__name__}: {e}")
+        if 'content' in locals():
+            logger.error(f"[CEREBRAS] Failed content: {content[:500]}")
+        return _fallback_analysis(title, description, link)
 
 
 EARN_TEXT = (
@@ -425,7 +481,10 @@ async def post_init(application: Application):
     # ТЕСТ: вызываем ИИ при старте, чтобы проверить ключ
     logger.info("[TEST] Проверяем Cerebras API при старте...")
     test_result = await cerebras_analyze("Test", "test desc", "https://example.com")
-    logger.info(f"[TEST] Результат: риск={test_result['scam_probability']}%, ключ работает={test_result['scam_probability'] != 0 or test_result['summary'] != 'Базовая эвристика'}")
+    is_working = test_result.get("_source") == "api"
+    logger.info(f"[TEST] Результат: риск={test_result['scam_probability']}%, ключ работает={is_working}")
+    if not is_working:
+        logger.warning("[TEST] Cerebras API недоступен — используется fallback-режим")
 
     asyncio.create_task(check_new_airdrops(application))
     logger.info("Бот запущен. Cerebras ИИ-фильтр активен.")
