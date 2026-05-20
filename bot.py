@@ -1,8 +1,12 @@
 import asyncio
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    ReplyKeyboardMarkup, KeyboardButton
+)
 from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, ContextTypes
+    Application, CommandHandler, CallbackQueryHandler,
+    ContextTypes, MessageHandler, filters
 )
 from config import BOT_TOKEN, ADMIN_IDS, CHECK_INTERVAL_MINUTES
 from database import (
@@ -43,33 +47,60 @@ EARN_TEXT = (
     "Не гонись за каждой раздачей — фильтруй через бота."
 )
 
+# ========== ПОСТОЯННАЯ КЛАВИАТУРА ==========
+
+def get_main_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("🎯 Аирдропы"), KeyboardButton("⚙️ Категории")],
+            [KeyboardButton("💰 Как заработать"), KeyboardButton("❓ Помощь")],
+            [KeyboardButton("🏠 Главное меню")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
+
+
+def get_admin_keyboard():
+    return ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("🎯 Аирдропы"), KeyboardButton("⚙️ Категории")],
+            [KeyboardButton("💰 Как заработать"), KeyboardButton("❓ Помощь")],
+            [KeyboardButton("🔧 Добавить аирдроп"), KeyboardButton("🔄 Запустить парсинг")],
+            [KeyboardButton("🏠 Главное меню")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
+
+
+# ========== ОБРАБОТЧИКИ КОМАНД ==========
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await add_user(user.id, user.username)
-    keyboard = [
-        [InlineKeyboardButton("🔍 Текущие аирдропы", callback_data="list")],
-        [InlineKeyboardButton("⚙️ Категории", callback_data="categories")],
-        [InlineKeyboardButton("💰 Как заработать", callback_data="earn")],
-        [InlineKeyboardButton("❓ Помощь", callback_data="help")]
-    ]
+
+    is_admin = user.id in ADMIN_IDS
+    keyboard = get_admin_keyboard() if is_admin else get_main_keyboard()
+
     await update.message.reply_text(
-        f"Привет, {user.first_name}!\n\n"
+        f"👋 Привет, {user.first_name}!\n\n"
         "Я бот для мониторинга крипто-аирдропов. "
-        "Буду присылать уведомления о новых раздачах.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        "Используй кнопки ниже для навигации.",
+        reply_markup=keyboard
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "📖 Команды бота:\n\n"
-        "/start — Главное меню\n"
-        "/list — Активные аирдропы\n"
-        "/categories — Категории уведомлений\n"
-        "/latest — Последние аирдропы\n"
-        "/earn — Сколько и как заработать\n"
-        "/parse — Принудительный парсинг (админ)\n\n"
+        "🎯 Аирдропы — список активных\n"
+        "⚙️ Категории — настройка уведомлений\n"
+        "💰 Как заработать — инструкция и доходы\n"
+        "❓ Помощь — это сообщение\n"
+        "🏠 Главное меню — вернуться в начало\n\n"
+        "Или используй команды:\n"
+        "/start /list /categories /earn /help\n\n"
         f"🔔 Автопроверка каждые {CHECK_INTERVAL_MINUTES} минут."
     )
     await update.message.reply_text(text)
@@ -103,10 +134,13 @@ async def categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         keyboard.append([InlineKeyboardButton(f"{icon} {cat}", callback_data=f"cat_{cat}")])
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu")])
     await update.message.reply_text(
-        "⚙️ Выбери категории для уведомлений:",
+        "⚙️ Выбери категории для уведомлений:\n"
+        "(Нажми на категорию, чтобы подписаться/отписаться)",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
+# ========== INLINE CALLBACKS ==========
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -148,13 +182,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_reply_markup(InlineKeyboardMarkup(keyboard))
 
     elif data == "menu":
-        keyboard = [
-            [InlineKeyboardButton("🔍 Текущие аирдропы", callback_data="list")],
-            [InlineKeyboardButton("⚙️ Категории", callback_data="categories")],
-            [InlineKeyboardButton("💰 Как заработать", callback_data="earn")],
-            [InlineKeyboardButton("❓ Помощь", callback_data="help")]
-        ]
-        await query.edit_message_text("👋 Главное меню\n\nВыбери действие:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text(
+            "👋 Главное меню\n\nИспользуй кнопки ниже:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🎯 Аирдропы", callback_data="list")],
+                [InlineKeyboardButton("⚙️ Категории", callback_data="categories")],
+                [InlineKeyboardButton("💰 Как заработать", callback_data="earn")],
+                [InlineKeyboardButton("❓ Помощь", callback_data="help")]
+            ])
+        )
 
     elif data == "earn":
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu")]]
@@ -165,11 +201,40 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "📖 Помощь\n\n"
             "Бот присылает уведомления об аирдропах по выбранным категориям.\n"
             "Если не выбрано ни одной категории — приходят все уведомления.\n\n"
-            "Команды: /start /list /categories /earn /parse"
+            "Команды: /start /list /categories /earn /help"
         )
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu")]]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
+
+# ========== ОБРАБОТЧИКИ КНОПОК (Reply Keyboard) ==========
+
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    user = update.effective_user
+
+    if text == "🎯 Аирдропы":
+        await list_airdrops(update, context)
+    elif text == "⚙️ Категории":
+        await categories_command(update, context)
+    elif text == "💰 Как заработать":
+        await earn_command(update, context)
+    elif text == "❓ Помощь":
+        await help_command(update, context)
+    elif text == "🏠 Главное меню":
+        await start(update, context)
+    elif text == "🔧 Добавить аирдроп" and user.id in ADMIN_IDS:
+        await update.message.reply_text(
+            "Используй команду:\n"
+            "/add <категория> <название> <ссылка> [описание]"
+        )
+    elif text == "🔄 Запустить парсинг" and user.id in ADMIN_IDS:
+        await admin_parse(update, context)
+    else:
+        await update.message.reply_text("Используй кнопки меню 👇")
+
+
+# ========== АДМИН КОМАНДЫ ==========
 
 async def admin_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -199,6 +264,8 @@ async def admin_parse(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Добавлено {count} аирдропов из внешних источников.")
 
 
+# ========== ФОНОВАЯ ЗАДАЧА ==========
+
 async def check_new_airdrops(application: Application):
     while True:
         try:
@@ -217,7 +284,10 @@ async def check_new_airdrops(application: Application):
                 sent_count = 0
                 for user_id in subscribers:
                     try:
-                        await application.bot.send_message(chat_id=user_id, text=text, parse_mode="Markdown", disable_web_page_preview=True)
+                        await application.bot.send_message(
+                            chat_id=user_id, text=text,
+                            parse_mode="Markdown", disable_web_page_preview=True
+                        )
                         sent_count += 1
                         await asyncio.sleep(0.05)
                     except Exception as e:
@@ -235,6 +305,8 @@ async def post_init(application: Application):
     logger.info("Бот запущен. Фоновая задача и парсер активны.")
 
 
+# ========== MAIN ==========
+
 def main():
     application = (
         Application.builder()
@@ -243,6 +315,7 @@ def main():
         .build()
     )
 
+    # Команды
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("list", list_airdrops))
@@ -251,7 +324,12 @@ def main():
     application.add_handler(CommandHandler("earn", earn_command))
     application.add_handler(CommandHandler("add", admin_add))
     application.add_handler(CommandHandler("parse", admin_parse))
+
+    # Inline кнопки
     application.add_handler(CallbackQueryHandler(button_handler))
+
+    # Reply кнопки (текстовые сообщения)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
     application.run_polling()
 
