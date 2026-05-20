@@ -1,4 +1,5 @@
 import asyncio
+import json
 import aiohttp
 from bs4 import BeautifulSoup
 from database import add_airdrop, save_airdrop_analysis
@@ -111,7 +112,7 @@ async def fetch_and_save_airdrops():
                     link=airdrop["link"],
                     category=airdrop["category"]
                 )
-                # AI-анализ
+                # Google AI анализ
                 analysis = await analyze_airdrop(airdrop["title"], airdrop["description"], airdrop["link"])
                 await save_airdrop_analysis(
                     airdrop_id=airdrop_id,
@@ -126,5 +127,5 @@ async def fetch_and_save_airdrops():
             except Exception as e:
                 print(f"[Parser] Не удалось сохранить аирдроп: {e}")
 
-        print(f"[Parser] Добавлено {added} новых аирдропов")
+        print(f"[Parser] Добавлено {added} новых аирдропов (с Google AI анализом)")
         return added
