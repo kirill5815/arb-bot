@@ -30,7 +30,7 @@ CATEGORIES = ["DeFi", "NFT", "Testnet", "Gaming", "Layer2", "Other"]
 # ===== ВПИШИ СВОЙ КЛЮЧ CEREBRAS СЮДА =====
 CEREBRAS_KEY = "csk-2cn93hr48ktj5c6hyt8nc4rd3rpcwd95mxypnmknecnvxnd9"
 CEREBRAS_URL = "https://api.cerebras.ai/v1/chat/completions"
-CEREBRAS_MODEL = "llama3.1-70b"
+CEREBRAS_MODEL = "llama-3.1-8b"
 
 
 def _extract_json(text: str) -> str:
