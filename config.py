@@ -5,10 +5,12 @@ ADMIN_IDS = [5452533555]
 CHECK_INTERVAL_MINUTES = 30
 DATABASE_PATH = "data/airdrops.db"
 
-# ===== Google AI Studio (Gemini) — БЕСПЛАТНО =====
-# 1. Иди на https://aistudio.google.com/app/apikey
-# 2. Создай ключ (без карты, через Gmail)
-# 3. Вставь сюда:
-OPENAI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyCsZiHifvIRLEBdakV1QZSkkUeeh68WXdk")
-AI_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-AI_MODEL = "gemini-2.5-flash"  # или "gemini-2.5-flash-lite" (ещё быстрее)
+# ===== Cerebras API — БЕСПЛАТНО, работает из РФ =====
+# 1. Иди на https://cloud.cerebras.ai/platform
+# 2. Sign up (email, без карты)
+# 3. API Keys → Generate API Key
+# 4. Скопируй ключ (начинается с csk-)
+# 5. Вставь сюда:
+OPENAI_API_KEY = os.getenv("CEREBRAS_API_KEY", "csk-8kpd9nmcr8h9986p3rw999h4cftvehxwwt9pkvrkkv5rvj5k")
+AI_API_URL = "https://api.cerebras.ai/v1/chat/completions"
+AI_MODEL = "llama3.1-70b"  # или "llama-3.1-8b" (быстрее, но проще)
